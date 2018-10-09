@@ -1,0 +1,32 @@
+pipeline {
+    agent any
+    stages {
+      
+      stage('Deploy_corpdmz.staples.com') {
+            steps {
+                echo "Depolying to corpdmz.staples.com"
+                sh 'sftp user@staplesstaging.craftww.com:/tmp/test.tar /tmp/test.tar'
+            }
+        }
+        stage('Deploy_preview.staples.com') {
+            steps {
+                echo "Deploying to preview.staples.com"
+                sh 'scp -rp /tmp/test.tar user@preview.staples.com:/tmp/test.tar'   
+            }
+        }
+        stage('Unzipping') {
+            steps {
+                echo " Extracting arcive on preview.staples.com"
+                sh 'ssh -i key.pem -t "user@preview.staples.com" "tar -xvf /tmp/test.tar'
+            }
+       
+       stage('Push to Artifactory') {
+            steps {
+                echo " Extracting arcive on preview.staples.com"
+                sh 'curl -u<USERNAME>:<PASSWORD> -XPUT <ARTIFACTORY_URL>/test.tar -T /tmp/test.tar '
+            }  
+            
+        }
+        
+    }
+}
