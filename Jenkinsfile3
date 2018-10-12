@@ -1,0 +1,15 @@
+pipeline {
+    agent any
+    stages {
+        stage('Test') {
+            steps {
+                withCredentials([
+                usernamePassword(credentialsId:'corp-sftp',usernameVariable:'USERNAME',passwordVariable:'PASSWORD')
+                usernamePassword(credentialsId:'cicd-publisher',usernameVariable:'ARTI_USERNAME',passwordVariable:'ARTI_PASSWORD')
+                ]){
+                sh  "./test.sh"
+            }
+            }   
+        }         
+    }
+}
