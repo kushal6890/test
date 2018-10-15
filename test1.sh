@@ -1,6 +1,7 @@
 #!/bin/bash
 
 USERNAME=craftworksin
+PASSWORD=6Q7B2s8s7aeS
 SERVER=corpdmz.staples.com
 ARTIFACTORY_USERNAME=redku001
 ARTIFACTORY_PASSWORD=Hanuman6890
