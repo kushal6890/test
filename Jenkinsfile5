@@ -1,0 +1,80 @@
+pipeline {
+    agent any
+    stages {
+
+        stage ('Cleanup local directory') {
+            steps {
+                echo "Cleaning up local directory prior to build"
+                sh """cd ${WORKSPACE}
+                rm -rf files_to_upload remote_files_to_get.txt artifactory_files.txt  artifactory_files_list.txt remote_files.txt remote_files_list.txt"""
+            }
+        }
+
+        stage('Get file list from corpdmz.staples.com') {
+            steps {
+                echo "listing from corpdmz.staples.com on local"
+                withCredentials([usernamePassword(credentialsId:'corp-sftp',usernameVariable:'USERNAME',passwordVariable:'PASSWORD')]){
+                sh  """cd ${WORKSPACE} && sshpass -p ${PASSWORD} sftp -oBatchMode=no -b - ${USERNAME}@corpdmz.staples.com >remote_files_list.txt<<-EOF
+                cd /files/continuous-deploy-test
+                ls -l
+                bye
+                EOF"""
+            }
+                echo "Formatting the list file"
+                sh """cd ${WORKSPACE}
+                /bin/sed -i '/sftp/d' remote_files_list.txt
+                /bin/cat remote_files_list.txt | /bin/awk \'{print \$9}\' | /bin/sort > remote_files.txt"""
+            }
+        }
+
+        stage('Get files list from artifactory') {
+            steps {
+                echo "Searching artifactory repo for the files"
+                withCredentials([usernamePassword(credentialsId:'cicd-publisher',usernameVariable:'ARTI_USERNAME',passwordVariable:'ARTI_PASSWORD')]){
+                sh """cd ${WORKSPACE}
+                curl -k -u ${ARTI_USERNAME}:${ARTI_PASSWORD}  -X POST --header "Content-Type:text/plain" -d  'items.find({"repo":"craftworks-artifacts-local"})' http://zrepo.staples.com/artifactory/api/search/aql > artifactory_files_list.txt"""
+                }
+                echo "Formatting the artifactory list file"
+                sh """cd ${WORKSPACE}
+                /bin/grep "name" artifactory_files_list.txt | /bin/awk -F'"' '{print \$4}' | /bin/sort > artifactory_files.txt"""
+            }
+        }
+
+        stage('Diffing the files') {
+            steps {
+                echo "Diffing the files"
+                sh """cd ${WORKSPACE}
+                /bin/diff remote_files.txt artifactory_files.txt | grep "^<" | sed 's/^<\\ //' > remote_files_to_get.txt"""
+            }
+        }
+
+        stage('Get files from remote server') {
+            steps {
+                echo "Getting files from sftp server"
+                withCredentials([usernamePassword(credentialsId:'corp-sftp',usernameVariable:'USERNAME',passwordVariable:'PASSWORD')]){
+                sh """cd ${WORKSPACE}
+                mkdir files_to_upload
+                cd files_to_upload
+                for filename in `cat ../remote_files_to_get.txt`;
+                do
+                sshpass -p ${PASSWORD} sftp -oBatchMode=no -b - ${USERNAME}@corpdmz.staples.com<<< \$"cd /files/continuous-deploy-test \n get \$filename \n bye"
+                done"""
+            }
+        }
+    }
+
+    stage ('Upload to artifactory') {
+          steps {
+                echo "uploading to artfactory"
+                withCredentials([usernamePassword(credentialsId:'cicd-publisher',usernameVariable:'ARTI_USERNAME',passwordVariable:'ARTI_PASSWORD')]){
+                sh """cd ${WORKSPACE}
+                      cd files_to_upload
+                      for filename in `ls`;
+                      do
+                      curl -u ${ARTI_USERNAME}:${ARTI_PASSWORD} -X PUT -T \$filename "http://zrepo.staples.com/artifactory/craftworks-artifacts-local/\$filename"
+                      done"""
+                }
+            }
+        }
+    }
+}
